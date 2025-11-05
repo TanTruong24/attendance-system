@@ -80,12 +80,6 @@ export default function LoginPage() {
                     disabled={loading}
                     className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md focus:ring-2 focus:ring-slate-200 disabled:opacity-60"
                 >
-                    <Image
-                        src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
-                        alt="Google"
-                        width={18}
-                        height={18}
-                    />
                     {loading ? "Đang xử lý..." : "Đăng nhập với Google"}
                 </button>
 
