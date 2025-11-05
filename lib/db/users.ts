@@ -12,7 +12,7 @@ export type User = {
     email?: string | null;
     username?: string | null;
     role: UserRole;
-    groupId?: string | null;
+    group?: string | null; // 👈 text group thay vì groupId
     cccdLast4?: string | null;
     status: UserStatus;
     createdAt: Timestamp;
@@ -29,7 +29,7 @@ function toUser(snap: FirebaseFirestore.DocumentSnapshot): User {
         email: d.email ?? null,
         username: d.username ?? null,
         role: d.role,
-        groupId: d.groupId ?? null,
+        group: d.group ?? null,
         cccdLast4: d.cccdLast4 ?? null,
         status: d.status ?? "active",
         createdAt: d.createdAt,
@@ -37,24 +37,25 @@ function toUser(snap: FirebaseFirestore.DocumentSnapshot): User {
     };
 }
 
+/* ==================== LIST ==================== */
 export async function listUsers(limit = 50): Promise<User[]> {
     const snap = await col().orderBy("createdAt", "desc").limit(limit).get();
     return snap.docs.map(toUser);
 }
 
-/* ==================== CREATE USER ==================== */
+/* ==================== CREATE ==================== */
 export async function createUser(input: {
     name: string;
     email?: string | null;
     username?: string;
     role: UserRole;
-    groupId?: string | null;
-    cccd: string; // ✅ bắt buộc
+    group?: string | null; // 👈 thay vì groupId
+    cccd: string;
     status?: UserStatus;
 }) {
     if (!input?.name?.trim()) throw new Error("Thiếu tên người dùng.");
     if (!input?.role) throw new Error("Thiếu vai trò.");
-    if (!input?.cccd?.trim()) throw new Error("Thiếu số CCCD."); // ✅ bắt buộc
+    if (!input?.cccd?.trim()) throw new Error("Thiếu số CCCD.");
 
     const emailLower = toLowerOrNull(input.email ?? null);
     const usernameLower = toLowerOrNull(input.username ?? null);
@@ -76,13 +77,13 @@ export async function createUser(input: {
 
     const ref = await col().add({
         name: input.name.trim(),
-        email: input.email ?? null, // ✅ có thể null
+        email: input.email ?? null,
         emailLower,
         username: input.username ?? null,
         usernameLower,
         role: input.role,
-        groupId: input.groupId ?? null,
-        cccdLast4: input.cccd.slice(-4), // ✅ bắt buộc nên luôn có
+        group: input.group ?? null, // 👈 text group
+        cccdLast4: input.cccd.slice(-4),
         status: input.status ?? "active",
         createdAt: nowTS(),
         updatedAt: nowTS(),
@@ -92,7 +93,7 @@ export async function createUser(input: {
     return toUser(snap);
 }
 
-/* ==================== UPDATE USER ==================== */
+/* ==================== UPDATE ==================== */
 export async function updateUser(
     id: string,
     patch: Partial<{
@@ -100,9 +101,9 @@ export async function updateUser(
         email: string | null;
         username: string | null;
         role: UserRole;
-        groupId: string | null;
+        group: string | null;
         status: UserStatus;
-        cccd: string; // ✅ nếu gửi thì validate & cập nhật last4
+        cccd: string;
     }>
 ) {
     const ref = col().doc(id);
@@ -113,7 +114,6 @@ export async function updateUser(
 
     if (patch.name !== undefined) data.name = patch.name?.trim() || null;
 
-    // email có thể null
     if (patch.email !== undefined) {
         const emailLower = toLowerOrNull(patch.email);
         if (emailLower) {
@@ -143,10 +143,9 @@ export async function updateUser(
     }
 
     if (patch.role !== undefined) data.role = patch.role;
-    if (patch.groupId !== undefined) data.groupId = patch.groupId;
+    if (patch.group !== undefined) data.group = patch.group ?? null; // 👈
     if (patch.status !== undefined) data.status = patch.status;
 
-    // Nếu có gửi cccd thì validate & cập nhật last4
     if (patch.cccd !== undefined) {
         if (!patch.cccd?.trim()) throw new Error("CCCD không được để trống.");
         data.cccdLast4 = patch.cccd.slice(-4);
@@ -157,7 +156,7 @@ export async function updateUser(
     return toUser(after);
 }
 
-/* ==================== DELETE USER ==================== */
+/* ==================== DELETE ==================== */
 export async function deleteUser(id: string) {
     const ref = col().doc(id);
     const snap = await ref.get();
@@ -165,4 +164,11 @@ export async function deleteUser(id: string) {
 
     await ref.delete();
     return { ok: true };
+}
+
+/* ===== READ ONE ===== */
+export async function getUserById(id: string): Promise<User | null> {
+  if (!id) return null;
+  const doc = await col().doc(id).get();
+  return doc.exists ? toUser(doc) : null;
 }

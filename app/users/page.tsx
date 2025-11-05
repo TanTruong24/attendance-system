@@ -10,6 +10,7 @@ type User = {
     email?: string | null;
     username?: string | null;
     role: "admin" | "staff" | "attendee";
+    group?: string | null; // 👈 thêm
 };
 
 type ApiList = { items: User[] };
@@ -27,8 +28,9 @@ export default function UsersPage() {
         username: "",
         password: "",
         role: "staff" as User["role"],
+        group: "", // 👈 thêm
     });
-    const [showPw, setShowPw] = useState(false); // 👈 toggle hiển/ẩn
+    const [showPw, setShowPw] = useState(false);
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [submitting, setSubmitting] = useState(false);
     const [banner, setBanner] = useState<{
@@ -38,6 +40,7 @@ export default function UsersPage() {
 
     const [query, setQuery] = useState("");
     const [roleFilter, setRoleFilter] = useState<"" | User["role"]>("");
+    const [groupFilter, setGroupFilter] = useState<string>(""); // 👈 thêm
 
     async function loadUsers() {
         try {
@@ -86,6 +89,7 @@ export default function UsersPage() {
                 role: form.role,
                 cccd: form.cccd.trim(), // bắt buộc
                 password: form.password, // backend có thể dùng cho identity local
+                group: form.group.trim() || null, // 👈 thêm
             };
             const res = await fetch("/api/users", {
                 method: "POST",
@@ -101,6 +105,7 @@ export default function UsersPage() {
                 username: "",
                 password: "",
                 role: "staff",
+                group: "",
             });
             setShowPw(false);
             await loadUsers();
@@ -118,14 +123,25 @@ export default function UsersPage() {
         const q = query.trim().toLowerCase();
         return users.filter((u) => {
             const matchRole = roleFilter ? u.role === roleFilter : true;
+            const matchGroup = groupFilter
+                ? (u.group || "") === groupFilter
+                : true; // 👈 thêm
             const matchQ =
                 !q ||
-                [u.name, u.email, u.username, u.role]
+                [u.name, u.email, u.username, u.role, u.group]
                     .filter(Boolean)
                     .some((v) => String(v).toLowerCase().includes(q));
-            return matchRole && matchQ;
+            return matchRole && matchGroup && matchQ;
         });
-    }, [users, query, roleFilter]);
+    }, [users, query, roleFilter, groupFilter]); // 👈 thêm groupFilter
+
+    const uniqueGroups = useMemo(
+        () =>
+            Array.from(
+                new Set(users.map((u) => u.group).filter(Boolean))
+            ) as string[],
+        [users]
+    );
 
     return (
         <main className="min-h-screen bg-gradient-to-b from-slate-50 to-white px-6 py-8">
@@ -282,6 +298,23 @@ export default function UsersPage() {
                                 </select>
                             }
                         />
+                        {/* 👇 Trường Nhóm */}
+                        <Field
+                            label="Nhóm (tùy chọn)"
+                            input={
+                                <input
+                                    value={form.group}
+                                    onChange={(e) =>
+                                        setForm((s) => ({
+                                            ...s,
+                                            group: e.target.value,
+                                        }))
+                                    }
+                                    placeholder="VD: Phòng IT, Kế toán..."
+                                    className="w-full rounded-xl border border-slate-200 px-3 py-2 focus:ring-2 focus:ring-slate-300"
+                                />
+                            }
+                        />
                         <div className="md:col-span-2">
                             <button
                                 type="submit"
@@ -317,6 +350,20 @@ export default function UsersPage() {
                             <option value="staff">staff</option>
                             <option value="attendee">attendee</option>
                         </select>
+
+                        {/* 👇 Bộ lọc nhóm */}
+                        <select
+                            value={groupFilter}
+                            onChange={(e) => setGroupFilter(e.target.value)}
+                            className="rounded-2xl border border-slate-200 bg-white px-3 py-2 focus:ring-2 focus:ring-slate-300"
+                        >
+                            <option value="">Tất cả nhóm</option>
+                            {uniqueGroups.map((g) => (
+                                <option key={g} value={g}>
+                                    {g}
+                                </option>
+                            ))}
+                        </select>
                     </div>
                     <div className="text-sm text-slate-500">
                         Tổng:{" "}
@@ -343,17 +390,19 @@ export default function UsersPage() {
                         <table className="min-w-full text-left text-sm">
                             <thead className="bg-slate-50 text-slate-600">
                                 <tr>
+                                    
                                     <Th>#</Th>
                                     <Th>Tên</Th>
                                     <Th>Email</Th>
                                     <Th>Username</Th>
                                     <Th>Vai trò</Th>
+                                    <Th>Nhóm</Th> {/* 👈 thêm */}
                                     <Th>CCCD (last 4)</Th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {filtered.map((u, idx) => {
-                                    const id = u.id ?? u.uid; // API của bạn có thể trả id hoặc uid
+                                    const id = u.id ?? u.uid;
                                     return (
                                         <tr
                                             key={
@@ -365,7 +414,7 @@ export default function UsersPage() {
                                                 router.push(
                                                     `/users/${u.uid || u.id}`
                                                 )
-                                            } // 👈 nhấp đúp mở chi tiết
+                                            }
                                             className="cursor-pointer hover:bg-slate-50/80"
                                             title="Nhấp đúp để mở chi tiết"
                                         >
@@ -378,6 +427,8 @@ export default function UsersPage() {
                                             <Td>
                                                 <RoleBadge role={u.role} />
                                             </Td>
+                                            <Td>{u.group || "—"}</Td>{" "}
+                                            {/* 👈 thêm */}
                                             <Td>{u.cccdLast4 ?? "••••"}</Td>
                                         </tr>
                                     );

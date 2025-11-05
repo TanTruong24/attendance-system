@@ -39,6 +39,7 @@ export default function CheckinByCodePage() {
       setSubmittingGoogle(true);
       const provider = new GoogleAuthProvider();
       const cred = await signInWithPopup(auth, provider);
+      // console.log("Google credential:", cred);
       const idToken = await cred.user.getIdToken();
 
       const res = await fetch("/api/checkin", {

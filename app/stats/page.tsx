@@ -1,90 +1,130 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+
+const GRACE_MINUTES = 10;
 
 type EventItem = {
     id: string;
     title: string;
     code?: string;
-    startAt?: string;
-    endAt?: string;
+    startAt?: any; // ISO string | {seconds,...} | number
+    endAt?: any;
 };
 type AttendanceItem = {
     id: string;
     userId: string;
-    lastStatus: "present" | "absent" | "late" | string;
+    lastStatus?: "present" | "absent" | "late" | string;
     lastCheckInAt?:
         | { seconds?: number; nanoseconds?: number }
         | string
         | number
         | null;
 };
-
 type ApiList<T> = { items: T[] };
 
 export default function StatsPage() {
+    const router = useRouter();
+
     const [events, setEvents] = useState<EventItem[]>([]);
     const [selected, setSelected] = useState<string>("");
-    const [attendees, setAttendees] = useState<AttendanceItem[]>([]);
+    const [selectedEvent, setSelectedEvent] = useState<EventItem | null>(null);
+
+    const [attendees, setAttendees] = useState<
+        (AttendanceItem & { derivedStatus: "present" | "late" | "absent" })[]
+    >([]);
     const [loading, setLoading] = useState(false);
     const [loadError, setLoadError] = useState<string | null>(null);
-    const [banner, setBanner] = useState<{
-        type: "success" | "error";
-        msg: string;
-    } | null>(null);
-
     const [statusFilter, setStatusFilter] = useState<
         "" | "present" | "absent" | "late"
     >("");
 
+    // ----- Load events list
     useEffect(() => {
-        fetch("/api/events", { cache: "no-store" })
-            .then((r) => r.json())
-            .then((d: ApiList<EventItem>) => setEvents(d.items || []))
-            .catch(() => setEvents([]));
+        (async () => {
+            try {
+                const r = await fetch("/api/events", { cache: "no-store" });
+                const j = await r.json();
+                const items: EventItem[] = (j?.items ?? []).map(normalizeEvent);
+                setEvents(items);
+            } catch {
+                setEvents([]);
+            }
+        })();
     }, []);
 
+    // ----- Load attendance when event changes
+    useEffect(() => {
+        if (!selected) {
+            setSelectedEvent(null);
+            setAttendees([]);
+            setLoadError(null);
+            return;
+        }
+        void loadAttendance();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selected]);
+
     async function loadAttendance() {
-        if (!selected) return;
         try {
             setLoading(true);
             setLoadError(null);
 
-            // (Optional) lấy meta sự kiện – giữ lại nếu cần dùng
-            await fetch(`/api/events/${selected}`, { cache: "no-store" }).catch(
-                () => null
-            );
+            // 1) event meta
+            const evRes = await fetch(`/api/events/${selected}`, {
+                cache: "no-store",
+            });
+            if (!evRes.ok)
+                throw new Error(
+                    `Không lấy được sự kiện (HTTP ${evRes.status})`
+                );
+            const evJson = await evRes.json();
+            // chấp nhận 2 dạng: {item} hoặc object thẳng
+            const ev = normalizeEvent(evJson?.item ?? evJson);
+            setSelectedEvent(ev);
 
-            const res = await fetch(`/api/attendances`, {
+            // 2) attendance summary
+            const atRes = await fetch(`/api/attendances`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ eventId: selected, summary: true }),
             });
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const data: ApiList<AttendanceItem> = await res.json();
-            setAttendees((data.items || []).map(normalizeAttendance));
-            setBanner(null);
+            if (!atRes.ok) throw new Error(await atRes.text());
+            const data: ApiList<AttendanceItem> = await atRes.json();
+
+            // 3) derive status by time window
+            const start = toDate(ev.startAt);
+            const end = toDate(ev.endAt);
+            const graceMs = GRACE_MINUTES * 60 * 1000;
+
+            const normalized = (data.items || []).map((a) => {
+                const checkIn = toDate(a.lastCheckInAt);
+                const derived = deriveStatus(checkIn, start, end, graceMs);
+                return {
+                    ...a,
+                    lastStatus: (a.lastStatus || "").toLowerCase(),
+                    derivedStatus: derived,
+                };
+            });
+            setAttendees(normalized);
         } catch (e: any) {
-            setLoadError(e?.message || "Không tải được dữ liệu điểm danh.");
+            setSelectedEvent(null);
             setAttendees([]);
+            setLoadError(e?.message || "Không tải được dữ liệu điểm danh.");
         } finally {
             setLoading(false);
         }
     }
 
-    // Tự động tải khi đổi sự kiện (vẫn giữ nút Xem nếu bạn muốn reload thủ công)
-    useEffect(() => {
-        if (selected) loadAttendance();
-    }, [selected]);
-
-    // ----- Tính toán nhanh
+    // ----- KPIs & filters
     const summary = useMemo(() => {
         const total = attendees.length;
         const present = attendees.filter(
-            (a) => a.lastStatus === "present"
+            (a) => a.derivedStatus === "present"
         ).length;
-        const late = attendees.filter((a) => a.lastStatus === "late").length;
+        const late = attendees.filter((a) => a.derivedStatus === "late").length;
         const absent = attendees.filter(
-            (a) => a.lastStatus === "absent"
+            (a) => a.derivedStatus === "absent"
         ).length;
         const rate = total ? Math.round((present / total) * 100) : 0;
         return { total, present, late, absent, rate };
@@ -92,14 +132,14 @@ export default function StatsPage() {
 
     const filtered = useMemo(() => {
         if (!statusFilter) return attendees;
-        return attendees.filter((a) => a.lastStatus === statusFilter);
+        return attendees.filter((a) => a.derivedStatus === statusFilter);
     }, [attendees, statusFilter]);
 
     function exportCSV() {
         const headers = ["userId", "status", "checkInAt"];
         const rows = attendees.map((a) => [
             a.userId,
-            a.lastStatus,
+            a.derivedStatus,
             formatDateTime(a.lastCheckInAt) || "",
         ]);
         const csv = [
@@ -120,6 +160,14 @@ export default function StatsPage() {
     return (
         <main className="min-h-screen bg-gradient-to-b from-slate-50 to-white px-6 py-8">
             <div className="mx-auto max-w-6xl">
+                {/* 🔙 Back */}
+                <button
+                    onClick={() => router.push("/dashboard")}
+                    className="mb-4 inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm hover:bg-slate-100"
+                >
+                    ← Quay lại Dashboard
+                </button>
+
                 {/* Header */}
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                     <div>
@@ -132,21 +180,14 @@ export default function StatsPage() {
                     </div>
                 </div>
 
-                {/* Banner lỗi/thông báo */}
-                {banner ? (
-                    <div
-                        className={[
-                            "mt-4 rounded-xl border px-4 py-3 text-sm",
-                            banner.type === "success"
-                                ? "border-emerald-200 bg-emerald-50 text-emerald-900"
-                                : "border-rose-200 bg-rose-50 text-rose-900",
-                        ].join(" ")}
-                    >
-                        {banner.msg}
+                {/* Error inline */}
+                {loadError ? (
+                    <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+                        {loadError}
                     </div>
                 ) : null}
 
-                {/* Bộ lọc & hành động */}
+                {/* Bộ lọc & actions */}
                 <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                         <div className="md:col-span-2">
@@ -167,6 +208,18 @@ export default function StatsPage() {
                                     </option>
                                 ))}
                             </select>
+                            {selectedEvent ? (
+                                <p className="mt-2 text-xs text-slate-500">
+                                    Thời gian:{" "}
+                                    <strong>
+                                        {formatDateTime(selectedEvent.startAt)}
+                                    </strong>{" "}
+                                    →{" "}
+                                    <strong>
+                                        {formatDateTime(selectedEvent.endAt)}
+                                    </strong>
+                                </p>
+                            ) : null}
                         </div>
 
                         <div className="flex items-end gap-2">
@@ -188,14 +241,10 @@ export default function StatsPage() {
                     </div>
                 </section>
 
-                {/* KPI */}
+                {/* KPIs */}
                 <div className="mt-6 grid gap-4 sm:grid-cols-4">
                     <KPI title="Tổng tham dự" value={String(summary.total)} />
-                    <KPI
-                        title="Check-in"
-                        value={String(summary.present)}
-                        hint="Đúng giờ"
-                    />
+                    <KPI title="Đúng giờ" value={String(summary.present)} />
                     <KPI title="Đi muộn" value={String(summary.late)} />
                     <KPI
                         title="Tỉ lệ điểm danh"
@@ -204,7 +253,7 @@ export default function StatsPage() {
                     />
                 </div>
 
-                {/* Lọc trạng thái */}
+                {/* Filter */}
                 <div className="mt-6 flex items-center gap-3">
                     <span className="text-sm text-slate-600">Lọc:</span>
                     <FilterPill
@@ -236,13 +285,9 @@ export default function StatsPage() {
                     </div>
                 </div>
 
-                {/* Bảng */}
+                {/* Table */}
                 <section className="mt-3 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-                    {loadError ? (
-                        <div className="p-6 text-sm text-rose-700">
-                            {loadError}
-                        </div>
-                    ) : loading ? (
+                    {loading ? (
                         <TableSkeleton />
                     ) : !attendees.length ? (
                         <div className="p-6 text-sm text-slate-600">
@@ -270,7 +315,7 @@ export default function StatsPage() {
                                         </Td>
                                         <Td>
                                             <StatusBadge
-                                                status={a.lastStatus}
+                                                status={a.derivedStatus}
                                             />
                                         </Td>
                                         <Td>
@@ -351,7 +396,11 @@ function FilterPill({
         </button>
     );
 }
-function StatusBadge({ status }: { status: string }) {
+function StatusBadge({
+    status,
+}: {
+    status: "present" | "late" | "absent" | string;
+}) {
     const low = (status || "").toLowerCase();
     const style =
         low === "present"
@@ -391,24 +440,50 @@ function TableSkeleton() {
 }
 
 /* ---------- Utils ---------- */
-function normalizeAttendance(a: AttendanceItem): AttendanceItem {
+function normalizeEvent(e: any): EventItem {
+    if (!e) return e;
     return {
-        ...a,
-        lastStatus: (a.lastStatus || "").toLowerCase() as any,
+        id: String(e.id ?? e.uid ?? ""),
+        title: e.title ?? "",
+        code: e.code ?? e.codeLower ?? undefined,
+        startAt: e.startAt ?? e.start_at ?? e.start ?? undefined,
+        endAt: e.endAt ?? e.end_at ?? e.end ?? undefined,
     };
 }
-
-function formatDateTime(src: AttendanceItem["lastCheckInAt"]) {
-    if (!src) return "";
-    let d: Date | null = null;
+function toDate(src: any): Date | null {
+    if (!src) return null;
+    if (src instanceof Date) return src;
     if (typeof src === "string") {
         const t = Date.parse(src);
-        if (!isNaN(t)) d = new Date(t);
-    } else if (typeof src === "number") {
-        d = new Date(src);
-    } else if (typeof src === "object" && "seconds" in src!) {
-        d = new Date((src.seconds || 0) * 1000);
+        return isNaN(t) ? null : new Date(t);
     }
+    if (typeof src === "number") return new Date(src);
+    if (typeof src === "object" && "seconds" in src)
+        return new Date((src.seconds || 0) * 1000);
+    return null;
+}
+function deriveStatus(
+    checkIn: Date | null,
+    start: Date | null,
+    end: Date | null,
+    graceMs: number
+) {
+    if (!checkIn) return "absent";
+    if (!start && !end) return "present";
+    if (start && checkIn.getTime() <= start.getTime() + graceMs)
+        return "present";
+    if (
+        start &&
+        end &&
+        checkIn.getTime() > start.getTime() + graceMs &&
+        checkIn.getTime() <= end.getTime()
+    )
+        return "late";
+    if (end && checkIn.getTime() > end.getTime()) return "late";
+    return "late";
+}
+function formatDateTime(src: any) {
+    const d = toDate(src);
     if (!d || isNaN(d.getTime())) return "";
     return d.toLocaleString("vi-VN", {
         hour: "2-digit",
@@ -418,11 +493,9 @@ function formatDateTime(src: AttendanceItem["lastCheckInAt"]) {
         year: "numeric",
     });
 }
-
 function safeCsv(v: unknown) {
     const s = String(v ?? "");
-    if (s.includes(",") || s.includes('"') || s.includes("\n")) {
+    if (s.includes(",") || s.includes('"') || s.includes("\n"))
         return `"${s.replace(/"/g, '""')}"`;
-    }
     return s;
 }

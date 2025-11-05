@@ -26,13 +26,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Quick KPIs */}
-        <div className="mt-8 grid gap-4 sm:grid-cols-3">
-          <KPI title="Sự kiện hôm nay" value="3" hint="2 đang diễn ra • 1 sắp tới" />
-          <KPI title="Tổng người dùng" value="124" hint="+6 tuần này" />
-          <KPI title="Tỉ lệ điểm danh" value="92%" hint="+4% so với tuần trước" />
-        </div>
-
         {/* Primary actions */}
         <div className="mt-8 grid gap-4 md:grid-cols-3">
           <NavCard
@@ -63,14 +56,6 @@ export default function Dashboard() {
               {
                 title: 'Sự kiện: An toàn Lao động tháng 11',
                 meta: 'Cập nhật 10 phút trước • 45/50 đã điểm danh',
-              },
-              {
-                title: 'Người dùng mới: Nguyen Van A',
-                meta: 'Thêm bởi Admin • 1 giờ trước',
-              },
-              {
-                title: 'Báo cáo: Điểm danh tuần 44',
-                meta: 'Tạo lúc 09:30 • PDF 1.2MB',
               },
             ].map((item, idx) => (
               <motion.div

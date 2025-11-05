@@ -1,64 +1,56 @@
 import { NextResponse } from "next/server";
-import { deleteUser, updateUser } from "@/lib/db/users";
-import { adminDb } from "@/lib/firebase/admin";
+import { getUserById, updateUser, deleteUser } from "@/lib/db/users";
 
-const usersCol = () => adminDb.collection("users");
-
-// Kiểu context: params là Promise<{ uid: string }>
 type Ctx = { params: Promise<{ uid: string }> };
 
 export async function GET(_req: Request, ctx: Ctx) {
-    const { uid } = await ctx.params; // 👈 phải await
+    const { uid } = await ctx.params;
     const id = (uid ?? "").trim();
     if (!id)
         return NextResponse.json({ error: "Missing uid" }, { status: 400 });
 
-    const doc = await usersCol().doc(id).get();
-    if (!doc.exists)
-        return NextResponse.json({ error: "Not found" }, { status: 404 });
-
-    const d = doc.data()!;
-    return NextResponse.json({
-        uid: doc.id,
-        id: doc.id,
-        name: d.name,
-        email: d.email ?? null,
-        username: d.username ?? null,
-        role: d.role,
-        status: d.status ?? "active",
-        cccdLast4: d.cccdLast4 ?? null,
-        groupId: d.groupId ?? null,
-        createdAt: d.createdAt?.toDate?.()?.toISOString?.() ?? null,
-        updatedAt: d.updatedAt?.toDate?.()?.toISOString?.() ?? null,
-    });
+    try {
+        const user = await getUserById(id);
+        if (!user)
+            return NextResponse.json({ error: "Not found" }, { status: 404 });
+        return NextResponse.json(user);
+    } catch (e: any) {
+        return NextResponse.json({ error: e.message }, { status: 500 });
+    }
 }
 
 export async function PUT(req: Request, ctx: Ctx) {
-    const { uid } = await ctx.params; // 👈 phải await
+    const { uid } = await ctx.params;
     const id = (uid ?? "").trim();
     if (!id)
         return NextResponse.json({ error: "Missing uid" }, { status: 400 });
 
-    const body = await req.json();
-    const u = await updateUser(id, body);
-    return NextResponse.json({
-        uid: u.id,
-        name: u.name,
-        email: u.email,
-        username: u.username,
-        role: u.role,
-        status: u.status,
-        cccdLast4: u.cccdLast4 ?? null,
-        groupId: u.groupId ?? null,
-    });
+    try {
+        const body = await req.json();
+        const updated = await updateUser(id, {
+            name: body.name?.trim(),
+            email: body.email ? String(body.email).trim() : null,
+            username: body.username?.trim(),
+            role: body.role,
+            group: body.group ? String(body.group).trim() : null, // 👈
+            status: body.status,
+        });
+        return NextResponse.json(updated);
+    } catch (e: any) {
+        return NextResponse.json({ error: e.message }, { status: 400 });
+    }
 }
 
 export async function DELETE(_req: Request, ctx: Ctx) {
-    const { uid } = await ctx.params; // 👈 phải await
+    const { uid } = await ctx.params;
     const id = (uid ?? "").trim();
     if (!id)
         return NextResponse.json({ error: "Missing uid" }, { status: 400 });
 
-    const ok = await deleteUser(id);
-    return NextResponse.json(ok);
+    try {
+        await deleteUser(id);
+        return NextResponse.json({ ok: true });
+    } catch (e: any) {
+        return NextResponse.json({ error: e.message }, { status: 400 });
+    }
 }
