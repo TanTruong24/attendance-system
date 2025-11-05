@@ -1,37 +1,64 @@
 import { NextResponse } from "next/server";
+import { deleteUser, updateUser } from "@/lib/db/users";
 import { adminDb } from "@/lib/firebase/admin";
 
-type Params = { params: { uid: string } };
+const usersCol = () => adminDb.collection("users");
 
-export async function GET(_req: Request, { params }: Params) {
-  try {
-    const doc = await adminDb.doc(`users/${params.uid}`).get();
-    if (!doc.exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    return NextResponse.json({ uid: doc.id, ...doc.data() });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
-  }
+// Kiểu context: params là Promise<{ uid: string }>
+type Ctx = { params: Promise<{ uid: string }> };
+
+export async function GET(_req: Request, ctx: Ctx) {
+    const { uid } = await ctx.params; // 👈 phải await
+    const id = (uid ?? "").trim();
+    if (!id)
+        return NextResponse.json({ error: "Missing uid" }, { status: 400 });
+
+    const doc = await usersCol().doc(id).get();
+    if (!doc.exists)
+        return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+    const d = doc.data()!;
+    return NextResponse.json({
+        uid: doc.id,
+        id: doc.id,
+        name: d.name,
+        email: d.email ?? null,
+        username: d.username ?? null,
+        role: d.role,
+        status: d.status ?? "active",
+        cccdLast4: d.cccdLast4 ?? null,
+        groupId: d.groupId ?? null,
+        createdAt: d.createdAt?.toDate?.()?.toISOString?.() ?? null,
+        updatedAt: d.updatedAt?.toDate?.()?.toISOString?.() ?? null,
+    });
 }
 
-export async function PATCH(req: Request, { params }: Params) {
-  try {
+export async function PUT(req: Request, ctx: Ctx) {
+    const { uid } = await ctx.params; // 👈 phải await
+    const id = (uid ?? "").trim();
+    if (!id)
+        return NextResponse.json({ error: "Missing uid" }, { status: 400 });
+
     const body = await req.json();
-    await adminDb.doc(`users/${params.uid}`).set(
-      { ...body, updatedAt: new Date() },
-      { merge: true }
-    );
-    const updated = await adminDb.doc(`users/${params.uid}`).get();
-    return NextResponse.json({ uid: updated.id, ...updated.data() });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
-  }
+    const u = await updateUser(id, body);
+    return NextResponse.json({
+        uid: u.id,
+        name: u.name,
+        email: u.email,
+        username: u.username,
+        role: u.role,
+        status: u.status,
+        cccdLast4: u.cccdLast4 ?? null,
+        groupId: u.groupId ?? null,
+    });
 }
 
-export async function DELETE(_req: Request, { params }: Params) {
-  try {
-    await adminDb.doc(`users/${params.uid}`).delete();
-    return NextResponse.json({ ok: true });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
-  }
+export async function DELETE(_req: Request, ctx: Ctx) {
+    const { uid } = await ctx.params; // 👈 phải await
+    const id = (uid ?? "").trim();
+    if (!id)
+        return NextResponse.json({ error: "Missing uid" }, { status: 400 });
+
+    const ok = await deleteUser(id);
+    return NextResponse.json(ok);
 }
