@@ -201,3 +201,27 @@ export async function getUserById(id: string): Promise<User | null> {
     const doc = await col().doc(id).get();
     return doc.exists ? toUser(doc) : null;
 }
+
+
+
+/**
+ * >>> ADDED: Tiện ích kiểm tra quyền admin theo uid.
+ */
+export async function isAdmin(uid: string): Promise<boolean> {
+    const u = await getUserById(uid);
+    return u?.role === "admin";
+}
+
+/** Tìm admin active theo emailLower (dùng cho Google OAuth) */
+export async function findActiveAdminByEmailLower(email?: string | null) {
+  const emailLower = toLowerOrNull(email ?? null);
+  if (!emailLower) return null;
+  const snap = await col()
+    .where("emailLower", "==", emailLower)
+    .where("role", "==", "admin")
+    .where("status", "==", "active")
+    .limit(1)
+    .get();
+  if (snap.empty) return null;
+  return toUser(snap.docs[0]);
+}

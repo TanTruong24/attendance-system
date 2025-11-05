@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { CalendarDays, Users, BarChart3, ArrowRight } from "lucide-react";
 import { motion } from "framer-motion";
+import LogoutButton from "@/components/LogoutButton";
+
 
 type EventItem = {
     id: string;
@@ -17,12 +19,12 @@ type AttendanceItem = {
     userId: string;
     lastStatus?: string;
     lastCheckInAt?:
-        | { seconds?: number; nanoseconds?: number }
-        | { _seconds?: number; _nanoseconds?: number }
-        | { toMillis?: () => number; toDate?: () => Date }
-        | string
-        | number
-        | null;
+    | { seconds?: number; nanoseconds?: number }
+    | { _seconds?: number; _nanoseconds?: number }
+    | { toMillis?: () => number; toDate?: () => Date }
+    | string
+    | number
+    | null;
 };
 type ApiList<T> = { items: T[] };
 
@@ -115,9 +117,13 @@ export default function Dashboard() {
                             Quản trị Hệ thống
                         </h1>
                         <p className="mt-1 text-sm text-slate-600">
-                            Quản trị điểm danh, sự kiện và người dùng của bạn
-                            trong một nơi.
+                            Quản trị điểm danh, sự kiện và người dùng của bạn trong một nơi.
                         </p>
+                    </div>
+
+                    {/* actions bên phải */}
+                    <div className="flex items-center gap-3">
+                        <LogoutButton />
                     </div>
                 </div>
 
@@ -182,8 +188,8 @@ export default function Dashboard() {
                                         <p className="mt-0.5 text-xs text-slate-500">
                                             {recent.lastUpdatedAt
                                                 ? `Cập nhật ${timeAgo(
-                                                      recent.lastUpdatedAt
-                                                  )} • `
+                                                    recent.lastUpdatedAt
+                                                )} • `
                                                 : ""}
                                             {recent.checkedCount}/
                                             {recent.totalUsers} đã điểm danh
