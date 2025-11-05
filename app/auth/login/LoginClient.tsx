@@ -70,9 +70,6 @@ export default function LoginClient() {
         <h1 className="text-center text-2xl font-extrabold tracking-tight text-slate-900">
           Đăng nhập
         </h1>
-        <p className="mt-2 text-center text-sm text-slate-600">
-          Chỉ đăng nhập với Google. Tài khoản phải là <b>admin</b> để truy cập.
-        </p>
 
         <button
           onClick={onLoginGoogle}
