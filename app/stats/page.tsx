@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 
 const GRACE_MINUTES = 10;
 
+/** ----- Types ----- */
 type EventItem = {
     id: string;
     title: string;
@@ -11,6 +12,7 @@ type EventItem = {
     startAt?: any; // ISO string | {seconds,...} | number
     endAt?: any;
 };
+
 type AttendanceItem = {
     id: string;
     userId: string;
@@ -21,7 +23,9 @@ type AttendanceItem = {
         | number
         | null;
 };
+
 type ApiList<T> = { items: T[] };
+type DerivedStatus = "present" | "late" | "absent";
 
 export default function StatsPage() {
     const router = useRouter();
@@ -31,7 +35,7 @@ export default function StatsPage() {
     const [selectedEvent, setSelectedEvent] = useState<EventItem | null>(null);
 
     const [attendees, setAttendees] = useState<
-        (AttendanceItem & { derivedStatus: "present" | "late" | "absent" })[]
+        (AttendanceItem & { derivedStatus: DerivedStatus })[]
     >([]);
     const [loading, setLoading] = useState(false);
     const [loadError, setLoadError] = useState<string | null>(null);
@@ -97,7 +101,9 @@ export default function StatsPage() {
             const end = toDate(ev.endAt);
             const graceMs = GRACE_MINUTES * 60 * 1000;
 
-            const normalized = (data.items || []).map((a) => {
+            const normalized: (AttendanceItem & {
+                derivedStatus: DerivedStatus;
+            })[] = (data.items || []).map((a) => {
                 const checkIn = toDate(a.lastCheckInAt);
                 const derived = deriveStatus(checkIn, start, end, graceMs);
                 return {
@@ -106,6 +112,7 @@ export default function StatsPage() {
                     derivedStatus: derived,
                 };
             });
+
             setAttendees(normalized);
         } catch (e: any) {
             setSelectedEvent(null);
@@ -396,11 +403,7 @@ function FilterPill({
         </button>
     );
 }
-function StatusBadge({
-    status,
-}: {
-    status: "present" | "late" | "absent" | string;
-}) {
+function StatusBadge({ status }: { status: DerivedStatus | string }) {
     const low = (status || "").toLowerCase();
     const style =
         low === "present"
@@ -467,7 +470,7 @@ function deriveStatus(
     start: Date | null,
     end: Date | null,
     graceMs: number
-) {
+): DerivedStatus {
     if (!checkIn) return "absent";
     if (!start && !end) return "present";
     if (start && checkIn.getTime() <= start.getTime() + graceMs)
