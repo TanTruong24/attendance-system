@@ -163,8 +163,19 @@ export default function StatsPage() {
         ).length;
         const late = rows.filter((r) => r.derivedStatus === "late").length;
         const absent = rows.filter((r) => r.derivedStatus === "absent").length;
-        const rate = total ? Math.round((present / total) * 100) : 0;
-        return { total, present, late, absent, rate };
+
+        const pct = (n: number) => (total ? Math.round((n / total) * 100) : 0);
+
+        return {
+            total,
+            present,
+            late,
+            absent,
+            // phần trăm theo tổng
+            presentPct: pct(present),
+            latePct: pct(late),
+            absentPct: pct(absent),
+        };
     }, [rows]);
 
     const filtered = useMemo(() => {
@@ -284,13 +295,13 @@ export default function StatsPage() {
                             >
                                 {loading ? "Đang tải..." : "Xem"}
                             </button>
-                            <button
+                            {/* <button
                                 onClick={exportCSV}
                                 disabled={!rows.length}
                                 className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 disabled:opacity-50"
                             >
                                 Xuất CSV
-                            </button>
+                            </button> */}
                         </div>
                     </div>
                 </section>
@@ -298,9 +309,21 @@ export default function StatsPage() {
                 {/* KPIs */}
                 <div className="mt-6 grid gap-4 sm:grid-cols-4">
                     <KPI title="Tổng người" value={String(summary.total)} />
-                    <KPI title="Đúng giờ" value={String(summary.present)} />
-                    <KPI title="Đi muộn" value={String(summary.late)} />
-                    <KPI title="Vắng" value={String(summary.absent)} />
+                    <KPI
+                        title="Đúng giờ"
+                        value={String(summary.present)}
+                        hint={`${summary.present}/${summary.total} • ${summary.presentPct}%`}
+                    />
+                    <KPI
+                        title="Đi muộn"
+                        value={String(summary.late)}
+                        hint={`${summary.late}/${summary.total} • ${summary.latePct}%`}
+                    />
+                    <KPI
+                        title="Vắng"
+                        value={String(summary.absent)}
+                        hint={`${summary.absent}/${summary.total} • ${summary.absentPct}%`}
+                    />
                 </div>
 
                 {/* Filter */}
