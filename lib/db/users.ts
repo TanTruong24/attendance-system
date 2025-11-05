@@ -1,7 +1,7 @@
 // lib/db/users.ts
 import { adminDb } from "@/lib/firebase/admin";
 import type { Timestamp } from "firebase-admin/firestore";
-import { nowTS, toLowerOrNull } from "./utils";
+import { hashCccd, nowTS, toLowerOrNull } from "./utils";
 
 export type UserRole = "admin" | "staff" | "attendee";
 export type UserStatus = "active" | "disabled";
@@ -12,8 +12,9 @@ export type User = {
     email?: string | null;
     username?: string | null;
     role: UserRole;
-    group?: string | null; // 👈 text group thay vì groupId
+    group?: string | null;
     cccdLast4?: string | null;
+    cccdHash?: string | null;
     status: UserStatus;
     createdAt: Timestamp;
     updatedAt: Timestamp;
@@ -31,6 +32,7 @@ function toUser(snap: FirebaseFirestore.DocumentSnapshot): User {
         role: d.role,
         group: d.group ?? null,
         cccdLast4: d.cccdLast4 ?? null,
+        cccdHash: d.cccdHash ?? null,
         status: d.status ?? "active",
         createdAt: d.createdAt,
         updatedAt: d.updatedAt,
@@ -49,13 +51,18 @@ export async function createUser(input: {
     email?: string | null;
     username?: string;
     role: UserRole;
-    group?: string | null; // 👈 thay vì groupId
+    group?: string | null;
     cccd: string;
     status?: UserStatus;
 }) {
     if (!input?.name?.trim()) throw new Error("Thiếu tên người dùng.");
     if (!input?.role) throw new Error("Thiếu vai trò.");
     if (!input?.cccd?.trim()) throw new Error("Thiếu số CCCD.");
+
+    // chuẩn hóa/validate CCCD (tùy quy định: 12 số)
+    const cccd = input.cccd.trim();
+    if (!/^\d{12}$/.test(cccd))
+        throw new Error("CCCD không hợp lệ (phải gồm 12 chữ số).");
 
     const emailLower = toLowerOrNull(input.email ?? null);
     const usernameLower = toLowerOrNull(input.username ?? null);
@@ -75,6 +82,14 @@ export async function createUser(input: {
         if (!dup.empty) throw new Error("Username đã tồn tại.");
     }
 
+    // 👉 kiểm tra trùng CCCD qua hash
+    const cccdHash = hashCccd(cccd);
+    const dupCccd = await col()
+        .where("cccdHash", "==", cccdHash)
+        .limit(1)
+        .get();
+    if (!dupCccd.empty) throw new Error("CCCD đã tồn tại.");
+
     const ref = await col().add({
         name: input.name.trim(),
         email: input.email ?? null,
@@ -82,8 +97,9 @@ export async function createUser(input: {
         username: input.username ?? null,
         usernameLower,
         role: input.role,
-        group: input.group ?? null, // 👈 text group
-        cccdLast4: input.cccd.slice(-4),
+        group: input.group ?? null,
+        cccdLast4: cccd.slice(-4),
+        cccdHash,
         status: input.status ?? "active",
         createdAt: nowTS(),
         updatedAt: nowTS(),
@@ -143,12 +159,25 @@ export async function updateUser(
     }
 
     if (patch.role !== undefined) data.role = patch.role;
-    if (patch.group !== undefined) data.group = patch.group ?? null; // 👈
+    if (patch.group !== undefined) data.group = patch.group ?? null;
     if (patch.status !== undefined) data.status = patch.status;
 
     if (patch.cccd !== undefined) {
-        if (!patch.cccd?.trim()) throw new Error("CCCD không được để trống.");
-        data.cccdLast4 = patch.cccd.slice(-4);
+        const cccd = (patch.cccd || "").trim();
+        if (!cccd) throw new Error("CCCD không được để trống.");
+        if (!/^\d{12}$/.test(cccd))
+            throw new Error("CCCD không hợp lệ (phải gồm 12 chữ số).");
+
+        const cccdHash = hashCccd(cccd);
+        const dup = await col()
+            .where("cccdHash", "==", cccdHash)
+            .limit(1)
+            .get();
+        if (!dup.empty && dup.docs[0].id !== id)
+            throw new Error("CCCD đã tồn tại.");
+
+        data.cccdLast4 = cccd.slice(-4);
+        data.cccdHash = cccdHash;
     }
 
     await ref.update(data);
@@ -168,7 +197,7 @@ export async function deleteUser(id: string) {
 
 /* ===== READ ONE ===== */
 export async function getUserById(id: string): Promise<User | null> {
-  if (!id) return null;
-  const doc = await col().doc(id).get();
-  return doc.exists ? toUser(doc) : null;
+    if (!id) return null;
+    const doc = await col().doc(id).get();
+    return doc.exists ? toUser(doc) : null;
 }

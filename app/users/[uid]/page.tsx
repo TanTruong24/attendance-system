@@ -187,7 +187,7 @@ export default function UserDetailPage() {
                             </select>
                         </Field>
                         <Field
-                            label={`CCCD (đang lưu last4: ${
+                            label={`CCCD  (********${
                                 form.cccdLast4 || "••••"
                             })`}
                         >

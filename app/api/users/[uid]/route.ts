@@ -1,3 +1,4 @@
+// app/api/users/[uid]/route.ts
 import { NextResponse } from "next/server";
 import { getUserById, updateUser, deleteUser } from "@/lib/db/users";
 
@@ -34,6 +35,7 @@ export async function PUT(req: Request, ctx: Ctx) {
             role: body.role,
             group: body.group ? String(body.group).trim() : null, // 👈
             status: body.status,
+            cccd: typeof body.cccd === "string" ? body.cccd : undefined, // 👈 thêm cccd (nếu có)
         });
         return NextResponse.json(updated);
     } catch (e: any) {

@@ -389,23 +389,13 @@ export default function UsersPage() {
                     ) : (
                         <table className="min-w-full text-left text-sm">
                             <thead className="bg-slate-50 text-slate-600">
-                                <tr>
-                                    
-                                    <Th>#</Th>
-                                    <Th>Tên</Th>
-                                    <Th>Email</Th>
-                                    <Th>Username</Th>
-                                    <Th>Vai trò</Th>
-                                    <Th>Nhóm</Th> {/* 👈 thêm */}
-                                    <Th>CCCD (last 4)</Th>
-                                </tr>
+                                <tr><Th>#</Th><Th>Tên</Th><Th>Email</Th><Th>Username</Th><Th>Vai trò</Th><Th>Nhóm</Th><Th>CCCD (last 4)</Th></tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {filtered.map((u, idx) => {
                                     const id = u.id ?? u.uid;
                                     return (
-                                        <tr
-                                            key={
+                                        <tr key={
                                                 id ??
                                                 `${u.email ?? "row"}-${idx}`
                                             }
@@ -428,7 +418,6 @@ export default function UsersPage() {
                                                 <RoleBadge role={u.role} />
                                             </Td>
                                             <Td>{u.group || "—"}</Td>{" "}
-                                            {/* 👈 thêm */}
                                             <Td>{u.cccdLast4 ?? "••••"}</Td>
                                         </tr>
                                     );
