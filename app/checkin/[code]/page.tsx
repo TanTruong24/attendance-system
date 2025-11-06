@@ -36,11 +36,17 @@ export default function CheckinByCodePage() {
   const [submittingCccd, setSubmittingCccd] = useState(false);
   const [inApp, setInApp] = useState(false);
 
-  // NEW: URL tuyệt đối & host+path cho intent (an toàn SSR) + detect Android
+  // URL tuyệt đối & host+path cho intent (an toàn SSR)
   const [absUrl, setAbsUrl] = useState<string>("");
   const [hostPath, setHostPath] = useState<string>("");
+
+  // Detect nền tảng
   const isAndroid = useMemo(
     () => typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent),
+    []
+  );
+  const isIOS = useMemo(
+    () => typeof navigator !== "undefined" && /iP(hone|ad|od)/i.test(navigator.userAgent),
     []
   );
 
@@ -105,7 +111,7 @@ export default function CheckinByCodePage() {
     });
   }
 
-  // NEW: xác định ngoài/ trong cửa sổ check-in
+  // Xác định ngoài/ trong cửa sổ check-in
   const { isBlocked, blockedReason } = useMemo(() => {
     if (!event) return { isBlocked: false, blockedReason: "" };
     const now = Date.now();
@@ -215,6 +221,17 @@ export default function CheckinByCodePage() {
     if (rememberCccd) pushCccdToHistory(cccd);
   }
 
+  // ===== Helper tạo link Chrome cho iOS =====
+  function makeChromeIOSUrl(url: string) {
+    try {
+      const u = new URL(url);
+      const scheme = u.protocol === "https:" ? "googlechromes" : "googlechrome";
+      return `${scheme}://${u.host}${u.pathname}${u.search}${u.hash}`;
+    } catch {
+      return url;
+    }
+  }
+
   if (loading) return <main className="p-6">Đang tải…</main>;
   if (!event) {
     return (
@@ -245,20 +262,24 @@ export default function CheckinByCodePage() {
             Bạn đang mở trong ứng dụng (Zalo/Facebook...). Popup có thể bị chặn.
             <div className="mt-2 text-slate-700">
               Hệ thống sẽ chuyển sang <b>đăng nhập bằng Redirect</b>. Nếu vẫn không được, vui lòng mở trang này bằng
-              <b> Chrome/Safari</b> (Menu → Mở bằng trình duyệt).
+              <b> Chrome</b> (Menu → Mở bằng trình duyệt).
             </div>
+
+            {/* Chỉ giữ Chrome */}
             <div className="mt-2 flex gap-2 flex-wrap">
-              {/* Chỉ render khi đã có absUrl để tránh lỗi SSR/SSG */}
               {absUrl && (
                 <>
-                  <a
-                    className="inline-block rounded-xl bg-slate-900 px-3 py-1.5 text-white text-xs"
-                    href={absUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Mở trong trình duyệt ngoài
-                  </a>
+                  {/* iOS → Chrome */}
+                  {isIOS && (
+                    <a
+                      className="inline-block rounded-xl border border-slate-300 px-3 py-1.5 text-xs"
+                      href={makeChromeIOSUrl(absUrl)}
+                    >
+                      Mở bằng Chrome (iOS)
+                    </a>
+                  )}
+
+                  {/* Android → Chrome bằng intent */}
                   {isAndroid && hostPath && (
                     <a
                       className="inline-block rounded-xl border border-slate-300 px-3 py-1.5 text-xs"
