@@ -1,7 +1,8 @@
 // app/api/auth/me/route.ts
 import { NextResponse } from "next/server";
 import { adminAuth } from "@/lib/firebase/admin";
-import { findActiveAdminByEmailLower } from "@/lib/db/users";
+// ⬇️ đổi import để chấp nhận admin hoặc manager
+import { findActiveAdminOrManagerByEmailLower } from "@/lib/db/users";
 
 const COOKIE_NAME = process.env.SESSION_COOKIE_NAME || "session";
 
@@ -17,9 +18,9 @@ export async function GET(req: Request) {
     if (!cookie) return NextResponse.json({ user: null });
 
     const decoded = await adminAuth.verifySessionCookie(cookie, true);
-    const adminUser = await findActiveAdminByEmailLower(decoded.email ?? null);
+    const user = await findActiveAdminOrManagerByEmailLower(decoded.email ?? null);
 
-    return NextResponse.json({ user: adminUser ?? null });
+    return NextResponse.json({ user: user ?? null });
   } catch {
     return NextResponse.json({ user: null });
   }

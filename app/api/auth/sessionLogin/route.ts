@@ -1,7 +1,8 @@
 // app/api/auth/sessionLogin/route.ts
 import { NextResponse } from "next/server";
 import { adminAuth } from "@/lib/firebase/admin";
-import { findActiveAdminByEmailLower } from "@/lib/db/users";
+// ⬇️ đổi sang finder admin|manager
+import { findActiveAdminOrManagerByEmailLower } from "@/lib/db/users";
 
 const COOKIE_NAME = process.env.SESSION_COOKIE_NAME || "session";
 const MAX_DAYS = Number(process.env.SESSION_COOKIE_MAX_DAYS || "5");
@@ -16,9 +17,9 @@ export async function POST(req: Request) {
     const decoded = await adminAuth.verifyIdToken(idToken, true);
     const email = decoded.email ?? null;
 
-    // Chỉ cho admin active
-    const adminUser = await findActiveAdminByEmailLower(email);
-    if (!adminUser) return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+    // Cho phép: admin hoặc manager đang active
+    const user = await findActiveAdminOrManagerByEmailLower(email);
+    if (!user) return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
 
     // Tạo session cookie
     const expiresIn = MAX_DAYS * 24 * 60 * 60 * 1000;
@@ -27,11 +28,11 @@ export async function POST(req: Request) {
     const res = NextResponse.json({
       ok: true,
       user: {
-        id: adminUser.id,
-        email: adminUser.email ?? null,
-        name: adminUser.name,
-        role: adminUser.role,       // "admin"
-        status: adminUser.status,   // "active"
+        id: user.id,
+        email: user.email ?? null,
+        name: user.name,
+        role: user.role,       // "admin" | "manager"
+        status: user.status,   // "active"
       },
     });
 
@@ -39,7 +40,7 @@ export async function POST(req: Request) {
       name: COOKIE_NAME,
       value: sessionCookie,
       httpOnly: true,
-      secure: IS_PROD,   // local HTTP: false; production: true
+      secure: IS_PROD,
       sameSite: "lax",
       path: "/",
       maxAge: Math.floor(expiresIn / 1000),

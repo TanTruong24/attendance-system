@@ -2,8 +2,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
-const GRACE_MINUTES = 10;
-
 /** ----- Types ----- */
 type EventItem = {
     id: string;
@@ -125,19 +123,12 @@ export default function StatsPage() {
             for (const a of atData.items ?? []) atByUser.set(a.userId, a);
 
             // 4) merge users + attendance; mặc định absent nếu không có attendance
-            const start = toDate(ev.startAt);
             const end = toDate(ev.endAt);
-            const graceMs = GRACE_MINUTES * 60 * 1000;
 
             const merged = users.map((u) => {
                 const att = atByUser.get(u.id);
                 const checkIn = toDate(att?.lastCheckInAt ?? null);
-                const derived: DerivedStatus = deriveStatus(
-                    checkIn,
-                    start,
-                    end,
-                    graceMs
-                );
+                const derived: DerivedStatus = deriveStatus(checkIn, end);
                 return {
                     ...u,
                     derivedStatus: att ? derived : "absent", // không có attendance => absent
@@ -296,12 +287,12 @@ export default function StatsPage() {
                                 {loading ? "Đang tải..." : "Xem"}
                             </button>
                             {/* <button
-                                onClick={exportCSV}
-                                disabled={!rows.length}
-                                className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 disabled:opacity-50"
-                            >
-                                Xuất CSV
-                            </button> */}
+                onClick={exportCSV}
+                disabled={!rows.length}
+                className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 disabled:opacity-50"
+              >
+                Xuất CSV
+              </button> */}
                         </div>
                     </div>
                 </section>
@@ -565,25 +556,22 @@ function toDate(src: any): Date | null {
     return null;
 }
 
-function deriveStatus(
-    checkIn: Date | null,
-    start: Date | null,
-    end: Date | null,
-    graceMs: number
-): DerivedStatus {
+/**
+ * Luật mới:
+ * - Không có check-in => vắng
+ * - Không có endAt => xem là đúng giờ (không có mốc so sánh)
+ * - checkIn < endAt => đúng giờ
+ * - checkIn > endAt => trễ
+ * - checkIn === endAt => vắng
+ */
+function deriveStatus(checkIn: Date | null, end: Date | null): DerivedStatus {
     if (!checkIn) return "absent";
-    if (!start && !end) return "present";
-    if (start && checkIn.getTime() <= start.getTime() + graceMs)
-        return "present";
-    if (
-        start &&
-        end &&
-        checkIn.getTime() > start.getTime() + graceMs &&
-        checkIn.getTime() <= end.getTime()
-    )
-        return "late";
-    if (end && checkIn.getTime() > end.getTime()) return "late";
-    return "late";
+    if (!end) return "present";
+    const t = checkIn.getTime();
+    const endMs = end.getTime();
+    if (t < endMs) return "present";
+    if (t > endMs) return "late";
+    return "absent"; // bằng endAt
 }
 
 function formatDateTime(src: any) {

@@ -18,7 +18,8 @@ export async function GET(_req: Request, ctx: Ctx) {
   if (snap.empty) return NextResponse.json("Event not found", { status: 404 });
 
   const doc = snap.docs[0];
-  const d = doc.data();
+  const d = doc.data() as any;
+
   return NextResponse.json({
     id: doc.id,
     code: d.code,
@@ -26,5 +27,8 @@ export async function GET(_req: Request, ctx: Ctx) {
     status: d.status ?? "published",
     startAt: d.startAt?.toDate?.()?.toISOString?.() ?? null,
     endAt: d.endAt?.toDate?.()?.toISOString?.() ?? null,
+    // NEW:
+    checkinOpenAt: d.checkinOpenAt?.toDate?.()?.toISOString?.() ?? null,
+    checkinCloseAt: d.checkinCloseAt?.toDate?.()?.toISOString?.() ?? null,
   });
 }

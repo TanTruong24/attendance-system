@@ -10,8 +10,11 @@ export type EventItem = {
     code: string;
     codeLower: string;
     title: string;
-    startAt: Timestamp;
-    endAt: Timestamp;
+    startAt: Timestamp; // DÙNG CHO logic đúng giờ/trễ/vắng
+    endAt: Timestamp; // DÙNG CHO logic đúng giờ/trễ/vắng
+    // --- NEW: cửa sổ chấm công được tính ---
+    checkinOpenAt?: Timestamp | null; // nếu null => không giới hạn mở
+    checkinCloseAt?: Timestamp | null; // nếu null => không giới hạn đóng
     url?: string | null;
     createdBy?: string | null;
     status: EventStatus;
@@ -34,6 +37,8 @@ function toEvent(snap: FirebaseFirestore.DocumentSnapshot): EventItem {
         title: d.title,
         startAt: d.startAt,
         endAt: d.endAt,
+        checkinOpenAt: d.checkinOpenAt ?? null, // NEW
+        checkinCloseAt: d.checkinCloseAt ?? null, // NEW
         url: d.url ?? null,
         createdBy: d.createdBy ?? null,
         status: d.status ?? "published",
@@ -57,6 +62,9 @@ export async function createEvent(input: {
     title: string;
     startAt: Date | string | number;
     endAt: Date | string | number;
+    // --- NEW (tuỳ chọn) ---
+    checkinOpenAt?: Date | string | number | null;
+    checkinCloseAt?: Date | string | number | null;
     createdBy?: string | null;
     status?: EventStatus;
     url?: string | null;
@@ -73,12 +81,23 @@ export async function createEvent(input: {
     if (end.toMillis() <= start.toMillis())
         throw new Error("endAt phải sau startAt.");
 
+    const openAt =
+        input.checkinOpenAt == null ? null : toTS(input.checkinOpenAt);
+    const closeAt =
+        input.checkinCloseAt == null ? null : toTS(input.checkinCloseAt);
+    if (openAt && closeAt && closeAt.toMillis() <= openAt.toMillis()) {
+        throw new Error("checkinCloseAt phải sau checkinOpenAt.");
+    }
+    // KHÔNG ép nằm trong [startAt, endAt] để khỏi ảnh hưởng rule cũ
+
     const ref = await col().add({
         code: input.code.trim(),
         codeLower,
         title: input.title.trim(),
         startAt: start,
         endAt: end,
+        checkinOpenAt: openAt ?? null,
+        checkinCloseAt: closeAt ?? null,
         url: input.url ?? null,
         createdBy: input.createdBy ?? null,
         status: input.status ?? "published",
@@ -90,7 +109,7 @@ export async function createEvent(input: {
     return toEvent(snap);
 }
 
-/* ---------- NEW: update + delete ---------- */
+/* ---------- update + delete ---------- */
 
 export async function updateEvent(
     id: string,
@@ -99,6 +118,9 @@ export async function updateEvent(
         title: string;
         startAt: Date | string | number;
         endAt: Date | string | number;
+        // --- NEW (tuỳ chọn) ---
+        checkinOpenAt: Date | string | number | null;
+        checkinCloseAt: Date | string | number | null;
         url: string | null;
         createdBy: string | null;
         status: EventStatus;
@@ -140,6 +162,25 @@ export async function updateEvent(
         throw new Error("endAt phải sau startAt.");
     }
 
+    // --- NEW: cửa sổ chấm công ---
+    if (Object.prototype.hasOwnProperty.call(patch, "checkinOpenAt")) {
+        data.checkinOpenAt =
+            patch.checkinOpenAt == null ? null : toTS(patch.checkinOpenAt);
+    }
+    if (Object.prototype.hasOwnProperty.call(patch, "checkinCloseAt")) {
+        data.checkinCloseAt =
+            patch.checkinCloseAt == null ? null : toTS(patch.checkinCloseAt);
+    }
+    if (
+        data.checkinOpenAt !== undefined &&
+        data.checkinCloseAt !== undefined &&
+        data.checkinOpenAt !== null &&
+        data.checkinCloseAt !== null &&
+        data.checkinCloseAt.toMillis() <= data.checkinOpenAt.toMillis()
+    ) {
+        throw new Error("checkinCloseAt phải sau checkinOpenAt.");
+    }
+
     if (patch.url !== undefined) data.url = patch.url;
     if (patch.createdBy !== undefined) data.createdBy = patch.createdBy;
     if (patch.status !== undefined) data.status = patch.status;
@@ -154,22 +195,10 @@ export async function deleteEvent(id: string) {
     const doc = await ref.get();
     if (!doc.exists) return { ok: true };
 
-    // Xoá subcollections (attendances, attendance_logs) theo batch
-    // (đủ dùng cho volume vừa phải; nếu rất lớn có thể dùng BulkWriter)
-    async function deleteBatch(q: FirebaseFirestore.Query) {
-        const snap = await q.get();
-        if (snap.empty) return;
-        const batch = adminDb.batch();
-        snap.docs.forEach((d) => batch.delete(d.ref));
-        await batch.commit();
-    }
-
-    // Xoá theo lô 300
     const limit = 300;
     // attendances
     while (true) {
-        const q = colAttendances(id).limit(limit);
-        const s = await q.get();
+        const s = await colAttendances(id).limit(limit).get();
         if (s.empty) break;
         const batch = adminDb.batch();
         s.docs.forEach((d) => batch.delete(d.ref));
@@ -177,8 +206,7 @@ export async function deleteEvent(id: string) {
     }
     // logs
     while (true) {
-        const q = colLogs(id).limit(limit);
-        const s = await q.get();
+        const s = await colLogs(id).limit(limit).get();
         if (s.empty) break;
         const batch = adminDb.batch();
         s.docs.forEach((d) => batch.delete(d.ref));
@@ -187,4 +215,17 @@ export async function deleteEvent(id: string) {
 
     await ref.delete();
     return { ok: true };
+}
+
+/* ---------- NEW helper: kiểm tra một check-in có được tính hay không ---------- */
+export function isCountableCheckin(evt: EventItem, at: Timestamp) {
+    // Nếu không cấu hình cửa sổ -> luôn tính (giữ nguyên hành vi cũ)
+    const openMs = evt.checkinOpenAt?.toMillis() ?? null;
+    const closeMs = evt.checkinCloseAt?.toMillis() ?? null;
+    const t = at.toMillis();
+
+    if (openMs == null && closeMs == null) return true;
+    if (openMs != null && closeMs == null) return t >= openMs;
+    if (openMs == null && closeMs != null) return t <= closeMs;
+    return t >= (openMs as number) && t <= (closeMs as number);
 }

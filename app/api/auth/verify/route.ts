@@ -1,7 +1,8 @@
 // app/api/auth/verify/route.ts
 import { NextResponse } from "next/server";
 import { adminAuth } from "@/lib/firebase/admin";
-import { findActiveAdminByEmailLower } from "@/lib/db/users";
+// ⬇️ đổi sang finder admin|manager
+import { findActiveAdminOrManagerByEmailLower } from "@/lib/db/users";
 
 const COOKIE_NAME = process.env.SESSION_COOKIE_NAME || "session";
 
@@ -17,19 +18,18 @@ export async function GET(req: Request) {
     if (!cookie) return NextResponse.json({ ok: false }, { status: 401 });
 
     const decoded = await adminAuth.verifySessionCookie(cookie, true);
-
-    const adminUser = await findActiveAdminByEmailLower(decoded.email ?? null);
-    if (!adminUser) return NextResponse.json({ ok: false }, { status: 403 });
+    const user = await findActiveAdminOrManagerByEmailLower(decoded.email ?? null);
+    if (!user) return NextResponse.json({ ok: false }, { status: 403 });
 
     return NextResponse.json({
       ok: true,
-      admin: true,
+      admin: user.role === "admin", // ⬅️ manager vẫn ok nhưng không phải admin
       user: {
-        id: adminUser.id,
-        email: adminUser.email ?? null,
-        name: adminUser.name,
-        role: adminUser.role,
-        status: adminUser.status,
+        id: user.id,
+        email: user.email ?? null,
+        name: user.name,
+        role: user.role,     // "admin" | "manager"
+        status: user.status,
       },
     });
   } catch {

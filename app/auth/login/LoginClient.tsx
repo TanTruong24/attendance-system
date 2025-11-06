@@ -27,7 +27,8 @@ export default function LoginClient() {
 
     if (res.status === 403) {
       try { await signOut(auth); } catch {}
-      throw new Error("Tài khoản không có quyền quản trị (admin).");
+      // ⬇️ sửa thông điệp để chấp nhận cả admin/manager
+      throw new Error("Tài khoản không có quyền truy cập (chỉ admin/manager).");
     }
     if (!res.ok) {
       const j = await res.json().catch(() => ({}));
@@ -53,7 +54,6 @@ export default function LoginClient() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
       <div className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-xl ring-1 ring-slate-200">
-        {/* Logo của bạn – giữ tỉ lệ, không cố định size */}
         <div className="mb-4 flex justify-center">
           <div className="relative h-24 w-24 sm:h-20 sm:w-20">
             <Image
@@ -76,13 +76,10 @@ export default function LoginClient() {
           disabled={loading}
           className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md focus:ring-2 focus:ring-slate-200 disabled:opacity-60"
         >
-          {/* dùng icon local để tránh cấu hình domain ảnh */}
           {loading ? "Đang xử lý..." : "Đăng nhập với Google"}
         </button>
 
-        {error && (
-          <p className="mt-4 text-center text-sm text-rose-600">{error}</p>
-        )}
+        {error && <p className="mt-4 text-center text-sm text-rose-600">{error}</p>}
       </div>
     </div>
   );

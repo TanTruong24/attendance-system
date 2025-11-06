@@ -3,7 +3,7 @@ import { adminDb } from "@/lib/firebase/admin";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 
 /* ================== Types ================== */
-export type UserRole = "admin" | "staff" | "attendee";
+export type UserRole = "admin" | "manager" | "attendee";
 export type UserStatus = "active" | "disabled";
 
 export type User = {
@@ -287,3 +287,4 @@ export async function attendanceSummary(eventId: string) {
     lastCheckInAt: a.lastCheckInAt ?? a.firstCheckInAt ?? null,
   }));
 }
+

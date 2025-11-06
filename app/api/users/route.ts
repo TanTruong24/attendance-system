@@ -50,7 +50,7 @@ export async function POST(req: Request) {
                 typeof body.username === "string"
                     ? body.username.trim()
                     : undefined,
-            role: body.role ?? "staff",
+            role: body.role ?? "manager",
             group: body.group ? String(body.group).trim() : null,
             cccd: String(body.cccd ?? ""), // createUser sẽ validate + băm + check trùng
             status: body.status, // nếu muốn cho phép set lúc tạo

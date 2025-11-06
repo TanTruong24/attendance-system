@@ -3,7 +3,7 @@ import { adminDb } from "@/lib/firebase/admin";
 import type { Timestamp } from "firebase-admin/firestore";
 import { hashCccd, nowTS, toLowerOrNull } from "./utils";
 
-export type UserRole = "admin" | "staff" | "attendee";
+export type UserRole = "admin" | "manager" | "attendee"; 
 export type UserStatus = "active" | "disabled";
 
 export type User = {
@@ -224,4 +224,29 @@ export async function findActiveAdminByEmailLower(email?: string | null) {
     .get();
   if (snap.empty) return null;
   return toUser(snap.docs[0]);
+}
+
+export async function isManager(uid: string): Promise<boolean> {
+  const u = await getUserById(uid);
+  return u?.role === "manager";
+}
+export async function isAdminOrManager(uid: string): Promise<boolean> {
+  const u = await getUserById(uid);
+  return u?.role === "admin" || u?.role === "manager";
+}
+
+export async function findActiveAdminOrManagerByEmailLower(email: string | null) {
+  const e = (email || "").trim().toLowerCase();
+  if (!e) return null;
+  const snap = await adminDb
+    .collection("users")
+    .where("emailLower", "==", e)
+    .where("status", "==", "active")
+    .limit(1)
+    .get();
+  if (snap.empty) return null;
+  const doc = snap.docs[0];
+  const d = doc.data() as any;
+  if (d.role !== "admin" && d.role !== "manager") return null;
+  return { id: doc.id, ...d };
 }

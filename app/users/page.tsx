@@ -9,14 +9,18 @@ type User = {
     cccdLast4?: string | null;
     email?: string | null;
     username?: string | null;
-    role: "admin" | "staff" | "attendee";
-    group?: string | null; // 👈 thêm
+    role: "admin" | "manager" | "attendee";
+    group?: string | null;
 };
 
 type ApiList = { items: User[] };
+type Role = "admin" | "manager" | "attendee" | undefined;
 
 export default function UsersPage() {
     const router = useRouter();
+    const [role, setRole] = useState<Role>(undefined);
+    const readOnly = role === "manager";
+
     const [users, setUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState<string | null>(null);
@@ -27,8 +31,8 @@ export default function UsersPage() {
         email: "",
         username: "",
         password: "",
-        role: "staff" as User["role"],
-        group: "", // 👈 thêm
+        role: "manager" as User["role"],
+        group: "",
     });
     const [showPw, setShowPw] = useState(false);
     const [errors, setErrors] = useState<Record<string, string>>({});
@@ -40,8 +44,18 @@ export default function UsersPage() {
 
     const [query, setQuery] = useState("");
     const [roleFilter, setRoleFilter] = useState<"" | User["role"]>("");
-    const [groupFilter, setGroupFilter] = useState<string>(""); // 👈 thêm
+    const [groupFilter, setGroupFilter] = useState<string>("");
 
+    async function loadRole() {
+        try {
+            const r = await fetch("/api/auth/verify", { cache: "no-store" });
+            if (!r.ok) return setRole(undefined);
+            const j = await r.json();
+            setRole(j?.user?.role as Role);
+        } catch {
+            setRole(undefined);
+        }
+    }
     async function loadUsers() {
         try {
             setLoading(true);
@@ -57,6 +71,7 @@ export default function UsersPage() {
         }
     }
     useEffect(() => {
+        loadRole();
         loadUsers();
     }, []);
 
@@ -78,18 +93,19 @@ export default function UsersPage() {
 
     async function addUser(e: React.FormEvent) {
         e.preventDefault();
+        if (readOnly) return; // manager không được tạo
         setBanner(null);
         if (!validate()) return;
         try {
             setSubmitting(true);
             const body = {
                 name: form.name.trim(),
-                email: form.email.trim() || null, // email có thể null
+                email: form.email.trim() || null,
                 username: form.username.trim(),
                 role: form.role,
-                cccd: form.cccd.trim(), // bắt buộc
-                password: form.password, // backend có thể dùng cho identity local
-                group: form.group.trim() || null, // 👈 thêm
+                cccd: form.cccd.trim(),
+                password: form.password,
+                group: form.group.trim() || null,
             };
             const res = await fetch("/api/users", {
                 method: "POST",
@@ -104,7 +120,7 @@ export default function UsersPage() {
                 email: "",
                 username: "",
                 password: "",
-                role: "staff",
+                role: "manager",
                 group: "",
             });
             setShowPw(false);
@@ -125,7 +141,7 @@ export default function UsersPage() {
             const matchRole = roleFilter ? u.role === roleFilter : true;
             const matchGroup = groupFilter
                 ? (u.group || "") === groupFilter
-                : true; // 👈 thêm
+                : true;
             const matchQ =
                 !q ||
                 [u.name, u.email, u.username, u.role, u.group]
@@ -133,7 +149,7 @@ export default function UsersPage() {
                     .some((v) => String(v).toLowerCase().includes(q));
             return matchRole && matchGroup && matchQ;
         });
-    }, [users, query, roleFilter, groupFilter]); // 👈 thêm groupFilter
+    }, [users, query, roleFilter, groupFilter]);
 
     const uniqueGroups = useMemo(
         () =>
@@ -146,7 +162,6 @@ export default function UsersPage() {
     return (
         <main className="min-h-screen bg-gradient-to-b from-slate-50 to-white px-6 py-8">
             <div className="mx-auto max-w-6xl">
-                {/* ✅ Nút quay lại về Dashboard */}
                 <button
                     onClick={() => router.push("/dashboard")}
                     className="mb-4 inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm hover:bg-slate-100"
@@ -156,6 +171,14 @@ export default function UsersPage() {
                 <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
                     Quản lý người dùng
                 </h1>
+
+                {/* Banner chỉ xem cho manager */}
+                {readOnly && (
+                    <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                        Bạn đang ở chế độ <b>chỉ xem</b> (manager). Chỉ tài
+                        khoản admin mới được thêm/sửa/xoá người dùng.
+                    </div>
+                )}
 
                 {banner ? (
                     <div
@@ -169,8 +192,12 @@ export default function UsersPage() {
                     </div>
                 ) : null}
 
-                {/* Form */}
-                <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                {/* Form thêm (bị khóa nếu manager) */}
+                <section
+                    className={`mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm ${
+                        readOnly ? "opacity-60" : ""
+                    }`}
+                >
                     <h2 className="text-base font-medium text-slate-900">
                         Thêm người dùng
                     </h2>
@@ -180,7 +207,6 @@ export default function UsersPage() {
                     >
                         <Field
                             label="Tên *"
-                            error={errors.name}
                             input={
                                 <input
                                     value={form.name}
@@ -192,12 +218,13 @@ export default function UsersPage() {
                                     }
                                     placeholder="Nguyễn Văn A"
                                     className="w-full rounded-xl border border-slate-200 px-3 py-2 focus:ring-2 focus:ring-slate-300"
+                                    disabled={readOnly}
+                                    readOnly={readOnly}
                                 />
                             }
                         />
                         <Field
                             label="CCCD *"
-                            error={errors.cccd}
                             input={
                                 <input
                                     value={form.cccd}
@@ -209,12 +236,13 @@ export default function UsersPage() {
                                     }
                                     placeholder="012345678901"
                                     className="w-full rounded-xl border border-slate-200 px-3 py-2 focus:ring-2 focus:ring-slate-300"
+                                    disabled={readOnly}
+                                    readOnly={readOnly}
                                 />
                             }
                         />
                         <Field
                             label="Email (không bắt buộc)"
-                            error={errors.email}
                             input={
                                 <input
                                     type="email"
@@ -227,12 +255,13 @@ export default function UsersPage() {
                                     }
                                     placeholder="user@company.com"
                                     className="w-full rounded-xl border border-slate-200 px-3 py-2 focus:ring-2 focus:ring-slate-300"
+                                    disabled={readOnly}
+                                    readOnly={readOnly}
                                 />
                             }
                         />
                         <Field
                             label="Username *"
-                            error={errors.username}
                             input={
                                 <input
                                     value={form.username}
@@ -244,12 +273,13 @@ export default function UsersPage() {
                                     }
                                     placeholder="username"
                                     className="w-full rounded-xl border border-slate-200 px-3 py-2 focus:ring-2 focus:ring-slate-300"
+                                    disabled={readOnly}
+                                    readOnly={readOnly}
                                 />
                             }
                         />
                         <Field
                             label="Mật khẩu *"
-                            error={errors.password}
                             input={
                                 <div className="flex gap-2">
                                     <input
@@ -262,16 +292,14 @@ export default function UsersPage() {
                                             }))
                                         }
                                         className="w-full rounded-xl border border-slate-200 px-3 py-2 focus:ring-2 focus:ring-slate-300"
+                                        disabled={readOnly}
+                                        readOnly={readOnly}
                                     />
                                     <button
                                         type="button"
                                         onClick={() => setShowPw((v) => !v)}
                                         className="rounded-xl border border-slate-200 bg-white px-3 text-sm"
-                                        aria-label={
-                                            showPw
-                                                ? "Ẩn mật khẩu"
-                                                : "Hiện mật khẩu"
-                                        }
+                                        disabled={readOnly}
                                     >
                                         {showPw ? "Ẩn" : "Hiện"}
                                     </button>
@@ -291,14 +319,16 @@ export default function UsersPage() {
                                         }))
                                     }
                                     className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 focus:ring-2 focus:ring-slate-300"
+                                    disabled={readOnly}
                                 >
-                                    <option value="admin">admin</option>
-                                    <option value="staff">staff</option>
-                                    <option value="attendee">attendee</option>
+                                    <option value="admin">Quản trị</option>
+                                    <option value="manager">Trưởng nhóm</option>
+                                    <option value="attendee">
+                                        Người tham gia
+                                    </option>
                                 </select>
                             }
                         />
-                        {/* 👇 Trường Nhóm */}
                         <Field
                             label="Nhóm (tùy chọn)"
                             input={
@@ -312,14 +342,20 @@ export default function UsersPage() {
                                     }
                                     placeholder="VD: Phòng IT, Kế toán..."
                                     className="w-full rounded-xl border border-slate-200 px-3 py-2 focus:ring-2 focus:ring-slate-300"
+                                    disabled={readOnly}
+                                    readOnly={readOnly}
                                 />
                             }
                         />
                         <div className="md:col-span-2">
                             <button
                                 type="submit"
-                                disabled={submitting}
-                                className="inline-flex items-center rounded-2xl bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800 disabled:opacity-50"
+                                disabled={submitting || readOnly}
+                                className={`inline-flex items-center rounded-2xl px-4 py-2 text-sm font-medium shadow-sm ${
+                                    readOnly
+                                        ? "border border-slate-200 bg-slate-100 text-slate-400"
+                                        : "bg-slate-900 text-white hover:bg-slate-800"
+                                }`}
                             >
                                 {submitting
                                     ? "Đang thêm..."
@@ -346,9 +382,9 @@ export default function UsersPage() {
                             className="rounded-2xl border border-slate-200 bg-white px-3 py-2 focus:ring-2 focus:ring-slate-300"
                         >
                             <option value="">Tất cả vai trò</option>
-                            <option value="admin">admin</option>
-                            <option value="staff">staff</option>
-                            <option value="attendee">attendee</option>
+                            <option value="admin">Quản trị</option>
+                            <option value="manager">Trưởng nhóm</option>
+                            <option value="attendee">Người tham gia</option>
                         </select>
 
                         {/* 👇 Bộ lọc nhóm */}
@@ -389,13 +425,22 @@ export default function UsersPage() {
                     ) : (
                         <table className="min-w-full text-left text-sm">
                             <thead className="bg-slate-50 text-slate-600">
-                                <tr><Th>#</Th><Th>Tên</Th><Th>Email</Th><Th>Username</Th><Th>Vai trò</Th><Th>Nhóm</Th><Th>CCCD (last 4)</Th></tr>
+                                <tr>
+                                    <Th>#</Th>
+                                    <Th>Tên</Th>
+                                    <Th>Email</Th>
+                                    <Th>Username</Th>
+                                    <Th>Vai trò</Th>
+                                    <Th>Nhóm</Th>
+                                    <Th>CCCD (last 4)</Th>
+                                </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {filtered.map((u, idx) => {
                                     const id = u.id ?? u.uid;
                                     return (
-                                        <tr key={
+                                        <tr
+                                            key={
                                                 id ??
                                                 `${u.email ?? "row"}-${idx}`
                                             }
@@ -474,7 +519,7 @@ function Td({
 function RoleBadge({ role }: { role: User["role"] }) {
     const map: Record<User["role"], string> = {
         admin: "bg-amber-100 text-amber-800 border-amber-200",
-        staff: "bg-blue-100 text-blue-800 border-blue-200",
+        manager: "bg-blue-100 text-blue-800 border-blue-200",
         attendee: "bg-emerald-100 text-emerald-800 border-emerald-200",
     };
     return (
