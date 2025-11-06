@@ -262,23 +262,13 @@ export default function CheckinByCodePage() {
             Bạn đang mở trong ứng dụng (Zalo/Facebook...). Popup có thể bị chặn.
             <div className="mt-2 text-slate-700">
               Hệ thống sẽ chuyển sang <b>đăng nhập bằng Redirect</b>. Nếu vẫn không được, vui lòng mở trang này bằng
-              <b> Chrome</b> (Menu → Mở bằng trình duyệt).
+              <b> Chrome/Safari</b>.
             </div>
 
             {/* Chỉ giữ Chrome */}
             <div className="mt-2 flex gap-2 flex-wrap">
               {absUrl && (
                 <>
-                  {/* iOS → Chrome */}
-                  {isIOS && (
-                    <a
-                      className="inline-block rounded-xl border border-slate-300 px-3 py-1.5 text-xs"
-                      href={makeChromeIOSUrl(absUrl)}
-                    >
-                      Mở bằng Chrome (iOS)
-                    </a>
-                  )}
-
                   {/* Android → Chrome bằng intent */}
                   {isAndroid && hostPath && (
                     <a
