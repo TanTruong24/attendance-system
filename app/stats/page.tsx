@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 /** ----- Types ----- */
 type EventItem = {
@@ -224,17 +225,25 @@ export default function StatsPage() {
                     ← Quay lại Dashboard
                 </button>
 
-                {/* Header */}
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-                    <div>
-                        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
-                            Thống kê điểm danh
-                        </h1>
-                        <p className="text-sm text-slate-600">
-                            Chọn sự kiện để xem số liệu và danh sách tham dự.
-                        </p>
-                    </div>
-                </div>
+        {/* Header */}
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
+              Thống kê điểm danh theo sự kiện
+            </h1>
+            <p className="text-sm text-slate-600">
+              Xem thống kê chi tiết của từng sự kiện, bao gồm đúng giờ, trễ và vắng.
+            </p>
+          </div>
+
+          {/* 👇 Thêm nút chuyển sang thống kê theo người dùng */}
+          <Link
+            href="/stats/users"
+            className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm hover:bg-slate-100 transition"
+          >
+            → Xem thống kê theo người dùng
+          </Link>
+        </div>
 
                 {/* Error inline */}
                 {loadError ? (

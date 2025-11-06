@@ -44,21 +44,41 @@ export default function EventsPage() {
         loadEvents();
     }, []);
 
+    function makeCodeFromTitle(title: string, at = new Date()) {
+        // 1️⃣ Chuẩn hoá tiêu đề
+        const plain = (title || "")
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "") // bỏ dấu
+            .replace(/[^\w\s]/g, " ") // loại ký tự đặc biệt
+            .replace(/\s+/g, " ") // gộp khoảng trắng
+            .trim();
+
+        // 2️⃣ Lấy chữ cái đầu (in hoa)
+        const initials = plain
+            .split(" ")
+            .filter(Boolean)
+            .map((w) => w[0]?.toUpperCase())
+            .join("");
+
+        // 3️⃣ Giữ nguyên phần số (ví dụ “112025” hoặc “2025”)
+        const numbers = plain.match(/\d+/g)?.join("") || "";
+
+        // 4️⃣ Thêm fallback khi không có chữ hoặc số
+        const prefix = initials || "EV";
+        const suffix =
+            numbers ||
+            `${at.getFullYear()}${String(at.getMonth() + 1).padStart(2, "0")}`;
+
+        return `${prefix}-${suffix}`;
+    }
+
+    // Thay thế hàm cũ bằng hàm này:
     function generateCodeFromTitle() {
         if (!title.trim()) {
             alert("Vui lòng nhập tên sự kiện trước.");
             return;
         }
-        const now = new Date();
-        const month = String(now.getMonth() + 1).padStart(2, "0");
-        const year = now.getFullYear();
-        const initials = title
-            .normalize("NFD")
-            .replace(/[\u0300-\u036f]/g, "")
-            .split(" ")
-            .map((w) => w[0]?.toUpperCase() || "")
-            .join("");
-        setCode(`${initials}-${year}-${month}`);
+        setCode(makeCodeFromTitle(title));
     }
 
     async function createEvent() {
